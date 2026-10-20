@@ -1,5 +1,8 @@
 # general-toe — 개인용 코인 차트
 
+- 저장소: https://github.com/jangseowon45-hub/general-toe
+- 배포(PWA 설치 가능): https://jangseowon45-hub.github.io/general-toe/
+
 트레이딩뷰 대신 쓰는 개인용 차트. Binance USDT-M 선물 공개 시세를 브라우저가 직접 받는다. 서버·API 키 없음.
 
 - 차트 엔진: [Lightweight Charts](https://github.com/tradingview/lightweight-charts) (Apache 2.0, 트레이딩뷰 공식 오픈소스)
@@ -29,7 +32,8 @@ CSV에 `symbol` 컬럼이 없으면 진입가로 심볼을 추정한다: >10,000
 
 ## 폰에 앱으로 설치(PWA)
 
-Chrome의 "홈 화면에 추가"는 **HTTPS**에서만 동작한다. `dist/`를 GitHub Pages·Cloudflare Pages 같은 무료 HTTPS 정적 호스팅에 올리고 폰 Chrome으로 열면 설치 배너가 뜬다. LAN IP(http://192.168.x.x:5173)로는 차트는 보이지만 설치는 안 된다.
+`main`에 푸시하면 GitHub Actions(.github/workflows/pages.yml)가 빌드해서 GitHub Pages에 올린다.
+폰 Chrome으로 https://jangseowon45-hub.github.io/general-toe/ 를 열고 메뉴 → "홈 화면에 추가"(또는 설치 배너). HTTPS가 필요하므로 LAN IP(http://192.168.x.x:5173)로는 차트만 보이고 설치는 안 된다.
 
 ## 하지 않는 것 / 2차 후보
 
