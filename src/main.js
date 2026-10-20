@@ -292,7 +292,8 @@ $('clearDrawings').addEventListener('click', () => {
 });
 const panel = $('alertPanel');
 $('toggleAlerts').addEventListener('click', () => { panel.hidden = !panel.hidden; if (!panel.hidden) alerts.refresh(); });
-$('testPush').addEventListener('click', () => alerts.testPush());
+$('testPush').addEventListener('click', () => { if (!alerts.hasKey()) { openSettings(); return; } alerts.testPush(); });
+$('alertList').addEventListener('click', e => { if (e.target.closest('.open-settings')) openSettings(); });
 
 const dlg = $('settings');
 function openSettings() {

@@ -79,6 +79,12 @@ export function createAlerts({ series, getSymbol, getPrice, listEl, statusEl }) 
       <span class="dir ${a.direction}">${a.direction === 'above' ? '▲' : '▼'}</span>
       <span class="px">${fmt(a.price)}</span><span class="note">${new Date(a.triggered_at * 1000).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} 발동</span></li>`;
     const mine = active.filter(a => a.symbol === sym), others = active.filter(a => a.symbol !== sym);
+    if (!cfg.key) {
+      listEl.innerHTML = `<div class="hdr">알림 중계 미설정</div>
+        <p class="setup">가격 알림을 쓰려면 중계 서버 키를 한 번 입력해야 해요. 키는 PC의 <code>chart/.relay-key.local</code> 또는 서버의 <code>/etc/general-toe-relay.env</code>에 있어요.</p>
+        <button class="chip open-settings">⚙ 설정 열기</button>`;
+      return;
+    }
     listEl.innerHTML = `
       <div class="hdr">활성 알림 ${active.length}개 <span class="push ${pushState}">${{ on: '앱 알림 켜짐', off: '앱 알림 꺼짐 · 텔레그램만', unsupported: '이 브라우저는 푸시 미지원', unknown: '' }[pushState]}</span></div>
       <ul>${mine.map(row).join('')}${others.map(row).join('')}${active.length ? '' : '<li class="empty">알림 없음. 🔔 도구를 켜고 차트의 가격을 탭하세요.</li>'}</ul>
