@@ -11,6 +11,8 @@
 - 봇 체결 표시: `public/trades.csv`(blog/tools/pull_ledger.sh 출력 형식)를 읽어 진입(화살표)·청산(원, 손익) 마커로 찍는다. 상단 CSV 버튼으로 다른 파일도 불러올 수 있다.
 - 시각 표시는 PC/폰의 로컬 시간대(KST). 원장 CSV의 시각은 UTC로 해석한다.
 - 설정(심볼·주기·지표)은 localStorage에 유지된다.
+- 그리기 도구: 추세선(두 점 탭), 수평선(가격 탭), 사각형(두 점 탭), 지우개(그림 탭), 모두 삭제. 심볼별로 localStorage에 저장되며 봉 주기를 바꿔도 같은 자리에 그려진다. 도구가 켜진 동안은 차트 이동/확대가 꺼진다(탭이 이동으로 먹히지 않게). Esc로 커서 복귀.
+- 가격 알림(🔔): 차트의 가격을 탭 → 가격 확인 → 중계 서버에 등록. 현재가보다 위면 ▲(상향 돌파), 아래면 ▼(하향 돌파). 발동하면 앱 알림(웹 푸시) + 텔레그램으로 온다. 알림 선은 노란 점선으로 표시. "알림 목록"에서 삭제·테스트.
 
 ## 실행
 
@@ -35,9 +37,21 @@ CSV에 `symbol` 컬럼이 없으면 진입가로 심볼을 추정한다: >10,000
 `main`에 푸시하면 GitHub Actions(.github/workflows/pages.yml)가 빌드해서 GitHub Pages에 올린다.
 폰 Chrome으로 https://jangseowon45-hub.github.io/general-toe/ 를 열고 메뉴 → "홈 화면에 추가"(또는 설치 배너). HTTPS가 필요하므로 LAN IP(http://192.168.x.x:5173)로는 차트만 보이고 설치는 안 된다.
 
+## 알림 중계 서버 (relay/)
+
+Oracle VM(봇 서버)에서 돌아가는 작은 FastAPI 서비스. 코드는 `relay/server.py`, 배포는 `relay/deploy.sh`.
+
+- 주소: `https://161.33.190.248.sslip.io/relay/` (기존 Caddy 사이트에 `handle_path /relay/*` 로 추가, 내부 127.0.0.1:8787)
+- 시세: Binance 선물 `!miniTicker@arr` 전 종목 1초 스트림. **이 VM에서는 `/ws/` 경로가 연결만 되고 데이터를 안 보내므로 `/market/stream?streams=` 경로를 쓴다**(기존 레코더와 동일).
+- 인증: 모든 요청에 `X-Relay-Key` 헤더. 키는 서버 `/etc/general-toe-relay.env`의 `RELAY_KEY`. 앱의 ⚙에서 한 번 입력하면 그 기기에 저장된다.
+- 전달: 웹 푸시(VAPID, 키는 서버 `vapid_private.pem`) + 텔레그램(봇 `.env`의 시장 알림 봇 토큰 재사용). 푸시 권한을 거부해도 텔레그램으로는 온다.
+- 데이터: `relay.db`(SQLite) — devices(기기·푸시 구독), alerts(규칙·발동 기록). 기기당 활성 알림 50개 제한.
+- 운영: `systemctl status general-toe-relay`, 로그 `journalctl -u general-toe-relay -f`, 헬스 `GET /relay/health`(인증 불필요).
+- 갱신: `server.py` 고치고 `wsl -e bash -lc "bash /mnt/e/money/chart/relay/deploy.sh"` — venv·키·env·Caddy는 최초 1회만 만들고 이후엔 코드만 올리고 재시작한다.
+
 ## 하지 않는 것 / 2차 후보
 
-- 알림(가격·지표): 앱이 꺼져 있을 때 받으려면 서버가 필요 → 봇이 도는 Oracle VM에 중계기 얹기
+- 지표 조건 알림(RSI 과매도 등): 봇의 alerts.py가 이미 텔레그램으로 보냄. 앱 통합은 미정
 - 주식·환율: 거래소 공짜 피드 없음 → 증권사 Open API(한국투자증권 등)
 - 그리기 도구(추세선 등), 멀티차트, 리플레이
 - 네이티브 APK: Capacitor로 감싸면 되지만 Android SDK 설치가 먼저

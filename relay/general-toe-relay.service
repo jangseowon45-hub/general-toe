@@ -1,0 +1,22 @@
+[Unit]
+Description=general-toe 가격 알림 중계 (FastAPI)
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/general-toe-relay
+EnvironmentFile=/etc/general-toe-relay.env
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/ubuntu/general-toe-relay/venv/bin/uvicorn server:app --host 127.0.0.1 --port 8787 --log-level warning
+Restart=always
+RestartSec=5
+MemoryMax=150M
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=general-toe-relay
+
+[Install]
+WantedBy=multi-user.target

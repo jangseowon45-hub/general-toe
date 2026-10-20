@@ -4,6 +4,8 @@ import {
 import { INTERVALS, fetchKlines, subscribeKline } from './data.js';
 import { sma, ema, rsi, bollinger } from './indicators.js';
 import { parseTrades, tradesToMarkers, summarize } from './trades.js';
+import { createDrawings } from './drawings.js';
+import { createAlerts } from './alerts.js';
 
 const SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT', 'BNBUSDT', 'DOGEUSDT'];
 const INDICATORS = [
@@ -22,6 +24,9 @@ const state = Object.assign(
   JSON.parse(localStorage.getItem(KEY) || '{}'),
 );
 if (!INTERVALS[state.interval]) state.interval = '15m';
+// 알림 클릭으로 열렸을 때 ?symbol=... 로 해당 심볼을 연다.
+const urlSym = new URLSearchParams(location.search).get('symbol');
+if (urlSym && SYMBOLS.includes(urlSym.toUpperCase())) state.symbol = urlSym.toUpperCase();
 if (!SYMBOLS.includes(state.symbol)) state.symbol = 'BTCUSDT';
 const save = () => localStorage.setItem(KEY, JSON.stringify(state));
 
@@ -52,6 +57,20 @@ const volume = chart.addSeries(HistogramSeries, {
 });
 chart.priceScale('vol').applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
 const markers = createSeriesMarkers(candles, []);
+
+// 그리기 도구 + 가격 알림 (bars/state는 아래에서 정의되지만 호출 시점에는 존재한다)
+const drawings = createDrawings({
+  chart, series: candles,
+  getRange: () => (bars.length ? { firstTime: disp(bars[0].time), step: INTERVALS[state.interval] } : null),
+  onCustomClick: (tool, p) => { if (tool === 'alert') { drawings.setTool('cursor'); alerts.placeAtPrice(p.price); } },
+});
+const alerts = createAlerts({
+  series: candles,
+  getSymbol: () => state.symbol,
+  getPrice: () => (bars.length ? bars[bars.length - 1].close : 0),
+  listEl: document.getElementById('alertList'),
+  statusEl: document.getElementById('alertStatus'),
+});
 
 const toCandle = b => ({ time: disp(b.time), open: b.open, high: b.high, low: b.low, close: b.close });
 const toVol = b => ({
@@ -200,6 +219,8 @@ async function loadSymbol() {
     if (myToken !== token) return;
     bars = data;
     renderAll({ fit: true });
+    drawings.load(state.symbol);
+    alerts.onSymbolChange();
   } catch (e) {
     console.error(e); setConn('error', `시세 로드 실패: ${e.message}`); return;
   }
@@ -255,9 +276,39 @@ for (const def of INDICATORS) {
 $('showTrades').checked = !!state.trades;
 $('showTrades').addEventListener('change', e => { state.trades = e.target.checked; save(); renderMarkers(); });
 
+// ---- 그리기 도구 / 알림 UI ----
+const toolBox = $('tools');
+toolBox.querySelectorAll('button[data-tool]').forEach(b => b.addEventListener('click', () => {
+  const t = b.dataset.tool;
+  if (t === 'alert' && !alerts.hasKey()) { openSettings(); return; }
+  drawings.setTool(drawings.getTool() === t && t !== 'cursor' ? 'cursor' : t);
+}));
+drawings.onToolChange(t => {
+  toolBox.querySelectorAll('button[data-tool]').forEach(b => { b.className = b.dataset.tool === t ? 'on' : ''; });
+  el.classList.toggle('tool-active', t !== 'cursor');
+});
+$('clearDrawings').addEventListener('click', () => {
+  if (drawings.count() && confirm(`${state.symbol.replace('USDT', '')} 차트의 그림 ${drawings.count()}개를 모두 지울까요?`)) drawings.clearAll();
+});
+const panel = $('alertPanel');
+$('toggleAlerts').addEventListener('click', () => { panel.hidden = !panel.hidden; if (!panel.hidden) alerts.refresh(); });
+$('testPush').addEventListener('click', () => alerts.testPush());
+
+const dlg = $('settings');
+function openSettings() {
+  const c = alerts.getConfig(); $('relayUrl').value = c.relay; $('relayKey').value = c.key;
+  dlg.showModal();
+}
+$('settingsBtn').addEventListener('click', openSettings);
+dlg.addEventListener('close', () => {
+  if (dlg.returnValue !== 'ok') return;
+  alerts.setConfig({ relay: $('relayUrl').value, key: $('relayKey').value });
+});
+
 // ---- 시작 ----
 loadSymbol();
 loadDefaultTrades();
+alerts.start();
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => navigator.serviceWorker.register(import.meta.env.BASE_URL + 'sw.js').catch(e => console.warn('sw', e)));
 }
