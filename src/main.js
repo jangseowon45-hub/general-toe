@@ -116,13 +116,21 @@ function buildIndicatorSeries() {
         : chart.addSeries(LineSeries, { ...common, color: l.color || color, lineWidth: l.width || 1.5, lineStyle: l.style || 0 }, pane);
     }
     if (def.pane) {
-      const p = chart.panes()[pane]; if (p) p.setHeight(Math.max(80, Math.round(el.clientHeight * 0.16)));
       const first = Object.values(series).find(x => x);
       (def.levels || []).forEach(lv => first.createPriceLine({ price: lv, color: '#787b86', lineWidth: 1, lineStyle: 3, axisLabelVisible: false }));
     }
     instSeries.set(inst.id, { def, inst, series, pane, color });
   });
+  layoutPanes();
   setAllIndicatorData();
+}
+// 패널 높이: 지표 패널은 각각 같은 높이, 나머지는 메인 차트. 패널을 하나씩 만들며 setHeight 하면 라이브러리가 비율을 다시 나눠 이전 패널이 찌그러지므로 마지막에 한 번에 맞춘다.
+function layoutPanes() {
+  const panes = chart.panes(); const n = panes.length - 1; if (n <= 0) return;
+  const total = el.clientHeight || 600;
+  const h = Math.max(70, Math.min(130, Math.round(total * (n >= 3 ? 0.14 : 0.17))));
+  for (let i = 1; i <= n; i++) panes[i].setHeight(h);
+  panes[0].setHeight(Math.max(160, total - h * n));
 }
 function setAllIndicatorData() {
   if (!bars.length) return;
