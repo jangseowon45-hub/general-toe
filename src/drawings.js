@@ -6,7 +6,8 @@
 // 시각→x 는 logical 인덱스 ((disp(t) - 첫봉시각)/봉길이) 를 쓰므로 미래 여백·미로드 과거에도 그려지고 주기를 바꿔도 같은 자리.
 
 const PALETTE = ['#2962ff', '#f5c542', '#26a69a', '#ef5350', '#e040fb', '#e8eaf0'];
-const FIB_LEVELS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
+const FIB_LEVELS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1, 1.272, 1.618, 2.618];
+const FIB_COLORS = ['#787b86', '#ef5350', '#ff9800', '#26a69a', '#2962ff', '#e040fb', '#787b86', '#26a69a', '#f5c542', '#ef5350'];
 const TOOLS = {
   trend:    { points: 2, label: '추세선',   color: '#2962ff' },
   ray:      { points: 2, label: '레이',     color: '#2962ff' },
@@ -54,12 +55,12 @@ export function createDrawings({ chart, series, container, toolbarEl, getRange, 
   const pOfY = y => series.coordinateToPrice(y);
   const paneW = () => ts().width();
   const paneH = () => { const p = chart.panes()[0]; return p ? p.getHeight() : container.clientHeight; };
-  const snapPrice = (t, price, y) => {
-    if (!magnet || !getBar) return price;
-    const b = getBar(t); if (!b) return price;
-    let best = price, bestD = 10;
+  const snapPoint = (t, price, y) => {
+    if (!magnet || !getBar) return { t, price };
+    const b = getBar(t); if (!b) return { t, price };
+    let best = price, bestD = Infinity;
     for (const v of [b.open, b.high, b.low, b.close]) { const yy = yOfP(v); if (yy != null && Math.abs(yy - y) < bestD) { bestD = Math.abs(yy - y); best = v; } }
-    return best;
+    return { t: b.time, price: best };
   };
 
   // ── 저장/동기화 ──
@@ -112,7 +113,7 @@ export function createDrawings({ chart, series, container, toolbarEl, getRange, 
   // ── 모델 ──
   function mk(type, points, props = {}) {
     const d = TOOLS[type];
-    return { id: uid(), type, points, props: { color: d.color, width: 1.5, style: 'solid', extendLeft: false, extendRight: type === 'fib', text: '', ...props }, updated: Date.now() / 1000, locked: false };
+    return { id: uid(), type, points, props: { color: d.color, width: 1.5, style: 'solid', extendLeft: false, extendRight: false, text: '', ...props }, updated: Date.now() / 1000, locked: false };
   }
   function commit(label) { history.push(JSON.stringify(shapes)); if (history.length > 60) history.shift(); future = []; }
   function touch(s) { s.updated = Date.now() / 1000; }
@@ -277,7 +278,7 @@ export function createDrawings({ chart, series, container, toolbarEl, getRange, 
         ctx.setLineDash([]); ctx.lineWidth = Math.max(1, Math.round(hpr));
         let prevY = null;
         FIB_LEVELS.forEach((lv, i) => {
-          const price = base + diff * lv; const y = yOfP(price) * vpr; const c = preview ? '#9aa4b8' : ['#787b86', '#ef5350', '#ff9800', '#26a69a', '#2962ff', '#e040fb', '#787b86'][i];
+          const price = base + diff * lv; const y = yOfP(price) * vpr; const c = preview ? '#9aa4b8' : FIB_COLORS[i];
           if (prevY != null) { ctx.fillStyle = c + '14'; ctx.fillRect(l, Math.min(prevY, y), r - l, Math.abs(y - prevY)); }
           ctx.strokeStyle = c; ctx.beginPath(); ctx.moveTo(l, y); ctx.lineTo(r, y); ctx.stroke();
           label(ctx, `${lv}  ${fmtPrice(price)}`, r, y - 14 * vpr, hpr, vpr, { align: 'right', fg: c, bg: '#131722cc' });
@@ -340,7 +341,7 @@ export function createDrawings({ chart, series, container, toolbarEl, getRange, 
     const r = container.getBoundingClientRect(); return { x: src.clientX - r.left, y: src.clientY - r.top };
   }
   const inPane = p => p.x >= 0 && p.x < paneW() && p.y >= 0 && p.y < paneH();
-  function pointAt(p) { const t = tOfX(p.x); const raw = pOfY(p.y); if (t == null || raw == null) return null; return { t, price: snapPrice(t, raw, p.y), x: p.x, y: p.y }; }
+  function pointAt(p) { const t = tOfX(p.x); const raw = pOfY(p.y); if (t == null || raw == null) return null; const sp = snapPoint(t, raw, p.y); return { t: sp.t, price: sp.price, x: p.x, y: p.y }; }
 
   function onDown(e) {
     if (!(e.target instanceof HTMLCanvasElement)) return;        // 오버레이 DOM 위는 무시
@@ -411,7 +412,7 @@ export function createDrawings({ chart, series, container, toolbarEl, getRange, 
     if (tool === 'text') { const txt = prompt('텍스트', ''); if (txt == null || !txt.trim()) { pending = null; requestUpdate(); return; } props.text = txt.trim(); }
     commit(); const s = mk(tool, pending.points, props); shapes.push(s); pending = null;
     afterChange(); select(s.id);
-    if (TOOLS[tool].points === 1 || isTouch) setTool('cursor');   // 한 점 도구·터치는 그리고 나서 커서로
+    setTool('cursor');   // 그리고 나면 항상 커서로 돌아온다
   }
   container.addEventListener('mousedown', onDown, true);
   container.addEventListener('touchstart', onDown, { capture: true, passive: false });
