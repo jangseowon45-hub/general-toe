@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#131722">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icon-192.png">
+  <link rel="apple-touch-icon" href="/icon-192.png">
+  <title>general-toe</title>
+  <link rel="stylesheet" href="/src/style.css">
+</head>
+<body>
+  <header id="topbar">
+    <div class="row">
+      <select id="symbol" aria-label="심볼"></select>
+      <div id="intervals" class="seg" role="group" aria-label="봉 주기"></div>
+    </div>
+    <div class="row">
+      <div id="indicators" class="seg" role="group" aria-label="지표"></div>
+      <label class="chip toggle"><input type="checkbox" id="showTrades"> 봇 체결</label>
+      <label class="chip file" title="봇 체결 CSV 불러오기">CSV<input type="file" id="csvFile" accept=".csv,text/csv"></label>
+    </div>
+  </header>
+  <main id="chart"></main>
+  <footer id="status">
+    <span id="price">–</span>
+    <span id="tradeinfo"></span>
+    <span id="conn" class="conn">연결 중…</span>
+  </footer>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

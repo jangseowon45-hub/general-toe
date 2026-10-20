@@ -1,0 +1,41 @@
+:root {
+  --bg: #131722;
+  --panel: #1e222d;
+  --border: #2a2e39;
+  --text: #d1d4dc;
+  --muted: #787b86;
+  --up: #26a69a;
+  --down: #ef5350;
+  --accent: #2962ff;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+  font: 13px/1.4 -apple-system, "Segoe UI", Roboto, "Noto Sans KR", sans-serif; overscroll-behavior: none; }
+body { display: flex; flex-direction: column; height: 100dvh; }
+#topbar { padding: calc(6px + env(safe-area-inset-top)) 8px 6px; border-bottom: 1px solid var(--border); background: var(--bg); }
+.row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.row + .row { margin-top: 6px; }
+select, .chip, .seg button {
+  background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 6px;
+  padding: 5px 9px; font: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent; user-select: none;
+}
+select { font-weight: 600; min-width: 110px; }
+.seg { display: flex; gap: 2px; }
+.seg button { border-radius: 0; border-right-width: 0; min-width: 36px; }
+.seg button:first-child { border-radius: 6px 0 0 6px; }
+.seg button:last-child { border-radius: 0 6px 6px 0; border-right-width: 1px; }
+.seg button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.seg button.ind.on { background: var(--panel); color: var(--c, var(--text)); border-color: var(--c, var(--border)); box-shadow: inset 0 -2px 0 var(--c); }
+.chip input[type=checkbox] { vertical-align: -2px; accent-color: var(--accent); margin: 0 2px 0 0; }
+.chip.file { color: var(--muted); }
+.chip.file input { display: none; }
+#chart { flex: 1; min-height: 0; position: relative; }
+#status { display: flex; align-items: center; gap: 12px; padding: 5px 10px calc(5px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--border); font-variant-numeric: tabular-nums; color: var(--muted); }
+#price { font-weight: 700; font-size: 15px; color: var(--text); }
+#price.up { color: var(--up); } #price.down { color: var(--down); }
+#tradeinfo { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.conn::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; background: var(--muted); vertical-align: 0; }
+.conn.open::before { background: var(--up); }
+.conn.closed::before, .conn.error::before { background: var(--down); }
+.conn.reconnecting::before, .conn.connecting::before, .conn.loading::before { background: #f5c542; }
