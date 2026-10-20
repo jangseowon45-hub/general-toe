@@ -7,6 +7,7 @@ import { parseTrades, tradesToMarkers, summarize } from './trades.js';
 import { createDrawings } from './drawings.js';
 import { createAlerts } from './alerts.js';
 import { createBotView, STRATEGIES } from './botview.js';
+import { STRATEGY_CATALOG, signalMarkers, summarizeSignals, statsLabel, strategyLabel } from './strategies.js';
 
 const SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT', 'BNBUSDT', 'DOGEUSDT'];
 const UP = '#26a69a', DOWN = '#ef5350';
@@ -31,6 +32,8 @@ if (!Array.isArray(state.indicators)) {
   state.indicators = Object.entries(map).filter(([k]) => old[k]).map(([, [type, params]], i) => ({ id: uid(), type, params, color: PALETTE[i % PALETTE.length] }));
   delete state.ind; save();
 }
+// 전략 인스턴스 목록 [{id,type,params,color}] — 지표와 같은 구조, 매수▲/매도▼ 화살표를 그린다.
+if (!Array.isArray(state.strategies)) state.strategies = [];
 
 // Lightweight Charts는 시각을 UTC로 그린다. 로컬(KST) 표시를 위해 오프셋만큼 밀어서 넣는다.
 const TZ = -new Date().getTimezoneOffset() * 60;
@@ -59,6 +62,7 @@ const volume = chart.addSeries(HistogramSeries, {
 });
 chart.priceScale('vol').applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
 const markers = createSeriesMarkers(candles, []);
+const stratMarkers = createSeriesMarkers(candles, []); // 전략 신호 화살표 (봇 체결 마커와 별도 레이어)
 
 // 그리기 도구 + 가격 알림 (bars/state는 아래에서 정의되지만 호출 시점에는 존재한다)
 const drawings = createDrawings({
@@ -141,6 +145,60 @@ function updateIndicatorsLast() {
     const r = e.def.build(bars, e.inst.params);
     for (const k of Object.keys(e.series)) { const a = r[k]; if (a && a.length) e.series[k].update(shiftPts([a[a.length - 1]])[0]); }
   }
+  updateStrategiesLast();
+}
+
+// ---- 전략 인스턴스 (보조선은 메인 패널에, 신호는 ▲▼ 마커로) ----
+const stratSeries = new Map(); // inst.id -> { def, inst, series:{key}, color, stats }
+let stratSig = '';             // 마지막으로 그린 신호 요약(변했을 때만 setMarkers)
+function buildStrategySeries() {
+  for (const e of stratSeries.values()) Object.values(e.series).forEach(x => chart.removeSeries(x));
+  stratSeries.clear();
+  state.strategies.forEach((inst, i) => {
+    const def = STRATEGY_CATALOG[inst.type]; if (!def) return;
+    const color = inst.color || PALETTE[(i + 3) % PALETTE.length];
+    const series = {};
+    for (const [k, l] of Object.entries(def.lines)) {
+      series[k] = chart.addSeries(LineSeries, {
+        color: l.color || color, lineWidth: l.width || 1.5, lineStyle: l.style || 0,
+        priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false, title: l.title || '',
+      }, 0);
+    }
+    stratSeries.set(inst.id, { def, inst, series, color, stats: null });
+  });
+  stratSig = '';
+  setAllStrategyData();
+}
+// 신호는 닫힌 봉까지만(형성 중 봉은 깜빡임 방지로 제외). 보조선은 형성 중 봉까지 그린다.
+function computeStrategies() {
+  const closed = bars.slice(0, -1); const all = []; const many = stratSeries.size > 1;
+  for (const e of stratSeries.values()) {
+    const full = e.def.build(bars, e.inst.params);
+    const r = closed.length ? e.def.build(closed, e.inst.params) : { signals: [] };
+    e.stats = summarizeSignals(closed, r.signals);
+    e.lines = full.lines;
+    all.push(...signalMarkers(closed, r.signals, many ? e.def.short : '', disp));
+  }
+  all.sort((a, b) => a.time - b.time);
+  return all;
+}
+function applyStrategyMarkers(all) {
+  const sig = all.length + ':' + (all.length ? all[all.length - 1].time + all[all.length - 1].text : '') + ':' + [...stratSeries.keys()].join(',');
+  if (sig === stratSig) return;
+  stratSig = sig; stratMarkers.setMarkers(all);
+  renderChips(); if (indDlg.open) renderDialog();
+}
+function setAllStrategyData() {
+  if (!bars.length || !stratSeries.size) { if (!stratSeries.size) { stratMarkers.setMarkers([]); stratSig = ''; } return; }
+  const all = computeStrategies();
+  for (const e of stratSeries.values()) for (const k of Object.keys(e.series)) e.series[k].setData(shiftPts(e.lines[k] || []));
+  applyStrategyMarkers(all);
+}
+function updateStrategiesLast() {
+  if (!bars.length || !stratSeries.size) return;
+  const all = computeStrategies();
+  for (const e of stratSeries.values()) for (const k of Object.keys(e.series)) { const a = e.lines[k]; if (a && a.length) e.series[k].update(shiftPts([a[a.length - 1]])[0]); }
+  applyStrategyMarkers(all);
 }
 
 // ---- 데이터 ----
@@ -180,6 +238,7 @@ function renderAll({ fit }) {
   candles.setData(bars.map(toCandle));
   volume.setData(bars.map(toVol));
   setAllIndicatorData();
+  setAllStrategyData();
   renderMarkers();
   applyPrecision();
   updatePriceLabel();
@@ -299,8 +358,35 @@ function renderChips() {
     c.querySelector('.rm').addEventListener('click', ev => { ev.stopPropagation(); removeIndicatorInst(inst.id); });
     box.appendChild(c);
   });
+  state.strategies.forEach((inst, i) => {
+    const def = STRATEGY_CATALOG[inst.type]; if (!def) return;
+    const e = stratSeries.get(inst.id); const color = (e && e.color) || inst.color || PALETTE[(i + 3) % PALETTE.length];
+    const c = document.createElement('span'); c.className = 'ichip strat'; c.style.setProperty('--c', color);
+    c.title = `${def.name}\n${def.desc}` + (e && e.stats ? '\n' + statsLabel(e.stats) : '');
+    c.innerHTML = `<span class="lbl">⚡ ${esc(strategyLabel(inst.type, inst.params))}</span><button class="rm" title="제거">✕</button>`;
+    c.querySelector('.lbl').addEventListener('click', () => editStrategy(inst.id));
+    c.querySelector('.rm').addEventListener('click', ev => { ev.stopPropagation(); removeStrategyInst(inst.id); });
+    box.appendChild(c);
+  });
 }
 function afterIndicatorsChange() { save(); buildIndicatorSeries(); renderChips(); renderDialog(); }
+function afterStrategiesChange() { save(); buildStrategySeries(); renderChips(); renderDialog(); }
+function addStrategy(type) {
+  const def = STRATEGY_CATALOG[type]; if (!def) return;
+  state.strategies.push({ id: uid(), type, params: { ...def.params }, color: PALETTE[(state.strategies.length + 3) % PALETTE.length] });
+  afterStrategiesChange();
+}
+function removeStrategyInst(id) { state.strategies = state.strategies.filter(x => x.id !== id); afterStrategiesChange(); }
+function editStrategy(id) {
+  const inst = state.strategies.find(x => x.id === id); if (!inst) return;
+  const def = STRATEGY_CATALOG[inst.type]; const keys = Object.keys(def.params); if (!keys.length) return;
+  const ans = prompt(`${def.name} 파라미터 (${keys.join(', ')})`, keys.map(k => inst.params[k]).join(', '));
+  if (ans == null) return;
+  const vals = ans.split(',').map(v => parseFloat(v.trim()));
+  if (vals.length !== keys.length || vals.some(v => !Number.isFinite(v) || v <= 0)) { alert('값이 올바르지 않아요'); return; }
+  keys.forEach((k, i) => { inst.params[k] = vals[i]; });
+  afterStrategiesChange();
+}
 function addIndicator(type) {
   const def = CATALOG[type]; if (!def) return;
   state.indicators.push({ id: uid(), type, params: { ...def.params }, color: PALETTE[state.indicators.length % PALETTE.length] });
@@ -326,7 +412,12 @@ function renderDialog() {
   const pstr = p => Object.entries(p).map(([k, v]) => `${k}=${v}`).join(' ');
   let html = '';
   const mine = state.indicators.filter(inst => CATALOG[inst.type] && match(CATALOG[inst.type].name + ' ' + inst.type));
-  if (mine.length) html += '<h4>적용 중</h4>' + mine.map(inst => { const d = CATALOG[inst.type]; return `<div class="item active" style="--c:${inst.color}"><span class="nm">${d.name} <span class="muted">${esc(pstr(inst.params))}</span></span><span class="ds">${d.desc}</span><span class="act"><button data-edit="${inst.id}" ${Object.keys(d.params).length ? '' : 'disabled'}>설정</button><button class="danger" data-rm="${inst.id}">제거</button></span></div>`; }).join('');
+  const myStrats = state.strategies.filter(inst => STRATEGY_CATALOG[inst.type] && match(STRATEGY_CATALOG[inst.type].name + ' ' + inst.type + ' 전략'));
+  if (mine.length || myStrats.length) html += '<h4>적용 중</h4>'
+    + mine.map(inst => { const d = CATALOG[inst.type]; return `<div class="item active" style="--c:${inst.color}"><span class="nm">${d.name} <span class="muted">${esc(pstr(inst.params))}</span></span><span class="ds">${d.desc}</span><span class="act"><button data-edit="${inst.id}" ${Object.keys(d.params).length ? '' : 'disabled'}>설정</button><button class="danger" data-rm="${inst.id}">제거</button></span></div>`; }).join('')
+    + myStrats.map(inst => { const d = STRATEGY_CATALOG[inst.type]; const e = stratSeries.get(inst.id); return `<div class="item active" style="--c:${inst.color}"><span class="nm">⚡ ${d.name} <span class="muted">${esc(pstr(inst.params))}</span></span><span class="ds">${d.desc}</span>${e && e.stats ? `<span class="st">${statsLabel(e.stats)}</span>` : ''}<span class="act"><button data-edit-strat="${inst.id}">설정</button><button class="danger" data-rm-strat="${inst.id}">제거</button></span></div>`; }).join('');
+  const sitems = Object.entries(STRATEGY_CATALOG).filter(([t, d]) => match(`${d.name} ${d.desc} ${t} ${d.short} 전략 매수 매도`));
+  if (sitems.length) html += '<h4>전략 (매수 ▲ · 매도 ▼ 화살표 · 닫힌 봉 기준)</h4>' + sitems.map(([t, d]) => `<div class="item"><span class="nm">⚡ ${d.name}</span><span class="ds">${d.desc} · 기본 ${esc(pstr(d.params))}</span><span class="act"><button class="primary" data-add-strat="${t}">추가</button></span></div>`).join('');
   const strats = Object.entries(STRATEGIES).filter(([n, d]) => match(n + ' ' + d.desc + ' 봇 전략'));
   if (strats.length) html += '<h4>봇 전략 (4h · 봇과 같은 계산)</h4>' + strats.map(([n, d]) => `<label class="strat"><input type="checkbox" data-strat="${n}" ${state.botView && botView.getStrategies()[n] ? 'checked' : ''}><span><b style="color:${d.color}">${d.label}</b> <span class="muted">${d.symbols.map(x => x.replace('USDT', '')).join('·')}</span><br><span class="ds muted">${d.desc}</span></span></label>`).join('');
   for (const g of GROUPS) {
@@ -341,6 +432,9 @@ $('indBody').addEventListener('click', e => {
   if (b.dataset.add) addIndicator(b.dataset.add);
   else if (b.dataset.rm) removeIndicatorInst(b.dataset.rm);
   else if (b.dataset.edit) editIndicator(b.dataset.edit);
+  else if (b.dataset.addStrat) addStrategy(b.dataset.addStrat);
+  else if (b.dataset.rmStrat) removeStrategyInst(b.dataset.rmStrat);
+  else if (b.dataset.editStrat) editStrategy(b.dataset.editStrat);
 });
 $('indBody').addEventListener('change', e => {
   const cb = e.target.closest('input[data-strat]'); if (!cb) return;
@@ -351,7 +445,7 @@ $('indSearch').addEventListener('input', renderDialog);
 $('addIndicator').addEventListener('click', () => { $('indSearch').value = ''; indDlg.showModal(); renderDialog(); $('indSearch').focus(); });
 $('indClose').addEventListener('click', () => indDlg.close());
 indDlg.addEventListener('click', e => { if (e.target === indDlg) indDlg.close(); });
-buildIndicatorSeries(); renderChips();
+buildIndicatorSeries(); buildStrategySeries(); renderChips();
 $('botView').checked = !!state.botView;
 $('botView').addEventListener('change', e => { state.botView = e.target.checked; save(); botView.setEnabled(state.botView); });
 if (state.botView) botView.setEnabled(true);

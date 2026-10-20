@@ -130,3 +130,7 @@ dialog#indicatorDialog::backdrop { background: rgba(0,0,0,0.55); }
 #indBody .empty { color: var(--muted); font-size: 12px; padding: 8px 12px; }
 #indBody label.strat { display: flex; gap: 8px; align-items: flex-start; padding: 8px 12px; border-top: 1px solid var(--border); cursor: pointer; }
 #indBody label.strat input { margin-top: 3px; accent-color: var(--accent); }
+
+/* 전략 칩·메뉴 */
+.chips .ichip.strat { border-left-style: double; border-left-width: 4px; }
+#indBody .item .st { grid-column: 1; font-size: 11px; color: var(--text); opacity: 0.85; }
