@@ -1,5 +1,5 @@
 // 앱 셸만 캐시한다. 거래소 데이터(binance)는 절대 캐시하지 않는다.
-const CACHE = 'general-toe-v1';
+const CACHE = 'general-toe-v2';
 self.addEventListener('install', e => { self.skipWaiting(); });
 self.addEventListener('activate', e => {
   e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim()));
