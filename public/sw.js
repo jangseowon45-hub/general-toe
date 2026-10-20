@@ -8,7 +8,8 @@ self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET' || url.origin !== self.location.origin) return;
   if (e.request.mode === 'navigate') {
-    e.respondWith(fetch(e.request).then(r => { caches.open(CACHE).then(c => c.put(self.registration.scope, r.clone())); return r; }).catch(() => caches.match(self.registration.scope)));
+    // GitHub Pages는 HTML에 max-age=600을 주므로 HTTP 캐시를 건너뛰고 서버에 재확인한다(해시 자산은 그대로 캐시).
+    e.respondWith(fetch(new Request(e.request, { cache: 'no-cache' })).then(r => { caches.open(CACHE).then(c => c.put(self.registration.scope, r.clone())); return r; }).catch(() => caches.match(self.registration.scope)));
     return;
   }
   e.respondWith(caches.match(e.request).then(hit => hit || fetch(e.request).then(r => {
