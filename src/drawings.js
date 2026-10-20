@@ -49,7 +49,16 @@ export function createDrawings({ chart, series, container, toolbarEl, getRange, 
 
   // ── 좌표 ──
   const ts = () => chart.timeScale();
-  const xOfT = t => { const r = getRange(); if (!r) return null; return ts().logicalToCoordinate((disp(t) - r.firstTime) / r.step); };
+  // logicalToCoordinate 는 정수 인덱스에만 좌표를 주고 소수에는 0을 돌려준다(라이브러리 동작).
+  // 다른 봉 주기에서 그린 점은 소수 인덱스가 되므로 이웃한 정수 두 점 사이를 선형 보간한다.
+  const xOfT = t => {
+    const r = getRange(); if (!r) return null;
+    const l = (disp(t) - r.firstTime) / r.step; const i = Math.floor(l);
+    const x0 = ts().logicalToCoordinate(i); if (x0 == null) return null;
+    if (l === i) return x0;
+    const x1 = ts().logicalToCoordinate(i + 1); if (x1 == null) return x0;
+    return x0 + (l - i) * (x1 - x0);
+  };
   const tOfX = x => { const r = getRange(); if (!r) return null; const l = ts().coordinateToLogical(x); return l == null ? null : undisp(r.firstTime + l * r.step); };
   const yOfP = p => series.priceToCoordinate(p);
   const pOfY = y => series.coordinateToPrice(y);
@@ -483,6 +492,6 @@ export function createDrawings({ chart, series, container, toolbarEl, getRange, 
     redraw: () => requestUpdate(),
     sync: syncNow, pull: pullRemote,
     // 디버그: 좌표별 히트 거리와 도형 픽셀 좌표
-    debug: (x, y) => ({ tool, selectedId, paneW: paneW(), paneH: paneH(), shapes: shapes.map(s => ({ id: s.id, type: s.type, pts: pts(s), hit: hitShape(s, x, y) })) }),
+    debug: (x, y) => { const r = getRange(); return { tool, selectedId, paneW: paneW(), paneH: paneH(), range: r, visible: ts().getVisibleLogicalRange(), shapes: shapes.map(s => ({ id: s.id, type: s.type, pts: pts(s), logical: r ? s.points.map(p => (disp(p.t) - r.firstTime) / r.step) : null, hit: hitShape(s, x, y) })) }; },
   };
 }
