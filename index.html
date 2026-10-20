@@ -25,13 +25,26 @@
       <label class="chip file" title="봇 체결 CSV 불러오기">CSV<input type="file" id="csvFile" accept=".csv,text/csv"></label>
     </div>
     <div class="row tools">
-      <div id="tools" class="seg" role="group" aria-label="그리기 도구">
-        <button data-tool="cursor" class="on" title="커서(이동/확대)">✥</button>
-        <button data-tool="trend" title="추세선: 두 점 탭">╱</button>
-        <button data-tool="hline" title="수평선: 가격 탭">―</button>
-        <button data-tool="rect" title="사각형: 두 점 탭">▭</button>
-        <button data-tool="erase" title="지우개: 그림 탭">⌫</button>
+      <div id="tools" class="seg scroll" role="group" aria-label="그리기 도구">
+        <button data-tool="cursor" class="on" title="커서: 그림 탭=선택, 핸들 드래그=편집">✥</button>
+        <button data-tool="trend" title="추세선 (두 점)">╱</button>
+        <button data-tool="ray" title="레이 (두 점, 오른쪽 무한)">⟋</button>
+        <button data-tool="extended" title="연장선 (두 점, 양쪽 무한)">⟷</button>
+        <button data-tool="hline" title="수평선">―</button>
+        <button data-tool="hray" title="수평 레이 (오른쪽만)">⊢</button>
+        <button data-tool="vline" title="수직선">|</button>
+        <button data-tool="rect" title="사각형 (두 점)">▭</button>
+        <button data-tool="channel" title="평행 채널 (세 점)">⫽</button>
+        <button data-tool="fib" title="피보나치 되돌림 (두 점)">Fib</button>
+        <button data-tool="text" title="텍스트">T</button>
+        <button data-tool="arrow" title="화살표 (두 점)">➚</button>
+        <button data-tool="measure" title="측정 (두 점)">📏</button>
         <button data-tool="alert" title="가격 알림: 가격 탭">🔔</button>
+      </div>
+      <div class="seg">
+        <button id="undoBtn" title="실행취소 (Ctrl+Z)">↶</button>
+        <button id="redoBtn" title="다시실행 (Ctrl+Y)">↷</button>
+        <button id="magnetBtn" title="자석: 시·고·저·종가에 붙기">🧲</button>
       </div>
       <button id="clearDrawings" class="chip" title="이 심볼의 그림 모두 삭제">모두 삭제</button>
       <button id="toggleAlerts" class="chip">알림 목록</button>
@@ -39,6 +52,7 @@
     </div>
   </header>
   <main id="chart">
+    <div id="shapeBar" hidden></div>
     <aside id="alertPanel" hidden>
       <div id="alertList"></div>
       <div class="actions"><button id="testPush" class="chip">테스트 알림 보내기</button></div>

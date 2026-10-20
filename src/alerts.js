@@ -136,8 +136,15 @@ export function createAlerts({ series, getSymbol, getPrice, listEl, statusEl }) 
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') refresh(); });
   }
 
+  // 그리기 동기화용 원격 저장소(같은 중계 서버·키 사용). 키가 없으면 null → 로컬만.
+  const remoteDrawings = {
+    pull: sym => api(`/drawings/${sym}`),
+    push: (sym, doc) => api(`/drawings/${sym}`, { method: 'PUT', body: JSON.stringify(doc) }),
+  };
+
   return {
     start, refresh, placeAtPrice, testPush,
+    remoteDrawings: () => (cfg.key ? remoteDrawings : null),
     onSymbolChange: () => { drawLines(); renderList(); },
     getConfig: () => ({ relay: cfg.relay, key: cfg.key || '' }),
     setConfig: ({ relay, key }) => { if (relay) cfg.relay = relay.trim(); cfg.key = (key || '').trim(); localStorage.setItem(KEY, JSON.stringify(cfg)); return refresh(); },

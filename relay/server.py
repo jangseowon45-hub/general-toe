@@ -66,6 +66,9 @@ def init_db():
               note text default '', created real not null,
               triggered_at real, triggered_price real);
             create index if not exists alerts_active on alerts(symbol) where triggered_at is null;
+            create table if not exists drawings(
+              symbol text not null, shape_id text not null, data text, updated real not null,
+              deleted integer not null default 0, primary key(symbol, shape_id));
             """
         )
 
@@ -267,6 +270,63 @@ def delete_alert(alert_id: int, device_id: str):
     if cur.rowcount == 0:
         raise HTTPException(404, "not found")
     return {"deleted": alert_id}
+
+# ── 그리기 동기화 ──────────────────────────────────────────────────
+# 키(=계정) 단위로 심볼별 도형을 저장한다. 도형별 updated 로 최신 것이 이기고, 삭제는 tombstone 으로 전파한다.
+class DrawingsDoc(BaseModel):
+    shapes: list = Field(default_factory=list)
+    tombstones: list = Field(default_factory=list)
+
+def _drawings_doc(c: sqlite3.Connection, symbol: str) -> dict:
+    rows = c.execute("select shape_id, data, updated, deleted from drawings where symbol=?", (symbol,)).fetchall()
+    shapes, tombs = [], []
+    for r in rows:
+        if r["deleted"]:
+            tombs.append({"id": r["shape_id"], "updated": r["updated"]})
+        else:
+            try:
+                shapes.append(json.loads(r["data"]))
+            except Exception:  # noqa: BLE001
+                pass
+    return {"shapes": shapes, "tombstones": tombs}
+
+@app.get("/drawings/{symbol}", dependencies=[Depends(require_key)])
+def get_drawings(symbol: str):
+    with db() as c:
+        return _drawings_doc(c, symbol.upper())
+
+@app.put("/drawings/{symbol}", dependencies=[Depends(require_key)])
+def put_drawings(symbol: str, doc: DrawingsDoc):
+    sym = symbol.upper()
+    if len(doc.shapes) > 500:
+        raise HTTPException(400, "too many shapes")
+    with db() as c:
+        for s in doc.shapes:
+            sid = str(s.get("id", ""))[:40]
+            upd = float(s.get("updated") or 0)
+            if not sid:
+                continue
+            cur = c.execute("select updated, deleted from drawings where symbol=? and shape_id=?", (sym, sid)).fetchone()
+            if cur is None or upd > cur["updated"]:
+                c.execute(
+                    """insert into drawings(symbol,shape_id,data,updated,deleted) values(?,?,?,?,0)
+                       on conflict(symbol,shape_id) do update set data=excluded.data, updated=excluded.updated, deleted=0""",
+                    (sym, sid, json.dumps(s, ensure_ascii=False), upd),
+                )
+        for t in doc.tombstones:
+            sid = str(t.get("id", ""))[:40]
+            upd = float(t.get("updated") or 0)
+            if not sid:
+                continue
+            cur = c.execute("select updated from drawings where symbol=? and shape_id=?", (sym, sid)).fetchone()
+            if cur is None or upd >= cur["updated"]:
+                c.execute(
+                    """insert into drawings(symbol,shape_id,data,updated,deleted) values(?,?,null,?,1)
+                       on conflict(symbol,shape_id) do update set data=null, updated=excluded.updated, deleted=1""",
+                    (sym, sid, upd),
+                )
+        c.execute("delete from drawings where deleted=1 and updated < ?", (time.time() - 30 * 86400,))
+        return _drawings_doc(c, sym)
 
 @app.post("/test", dependencies=[Depends(require_key)])
 def test_push(device_id: str):

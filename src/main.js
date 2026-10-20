@@ -60,9 +60,13 @@ const markers = createSeriesMarkers(candles, []);
 
 // 그리기 도구 + 가격 알림 (bars/state는 아래에서 정의되지만 호출 시점에는 존재한다)
 const drawings = createDrawings({
-  chart, series: candles,
+  chart, series: candles, container: el, toolbarEl: document.getElementById('shapeBar'),
+  disp, undisp: t => t - TZ,
   getRange: () => (bars.length ? { firstTime: disp(bars[0].time), step: INTERVALS[state.interval] } : null),
+  getBar: t => { if (!bars.length) return null; const step = INTERVALS[state.interval]; const bt = Math.floor(t / step) * step; let lo = 0, hi = bars.length - 1; while (lo <= hi) { const m = (lo + hi) >> 1; if (bars[m].time === bt) return bars[m]; bars[m].time < bt ? lo = m + 1 : hi = m - 1; } return null; },
+  getRemote: () => alerts.remoteDrawings(),
   onCustomClick: (tool, p) => { if (tool === 'alert') { drawings.setTool('cursor'); alerts.placeAtPrice(p.price); } },
+  onStatus: msg => { const e = document.getElementById('alertStatus'); if (e) e.textContent = msg; },
 });
 const alerts = createAlerts({
   series: candles,
@@ -290,6 +294,10 @@ drawings.onToolChange(t => {
 $('clearDrawings').addEventListener('click', () => {
   if (drawings.count() && confirm(`${state.symbol.replace('USDT', '')} 차트의 그림 ${drawings.count()}개를 모두 지울까요?`)) drawings.clearAll();
 });
+window.__drawings = drawings; // 콘솔 디버그용
+$('undoBtn').addEventListener('click', () => drawings.undo());
+$('redoBtn').addEventListener('click', () => drawings.redo());
+$('magnetBtn').addEventListener('click', () => { drawings.setMagnet(!drawings.getMagnet()); $('magnetBtn').classList.toggle('on', drawings.getMagnet()); });
 const panel = $('alertPanel');
 $('toggleAlerts').addEventListener('click', () => { panel.hidden = !panel.hidden; if (!panel.hidden) alerts.refresh(); });
 $('testPush').addEventListener('click', () => { if (!alerts.hasKey()) { openSettings(); return; } alerts.testPush(); });

@@ -69,3 +69,21 @@ dialog#settings button { background: var(--panel); color: var(--text); border: 1
 dialog#settings button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 #alertPanel .setup { font-size: 12px; color: var(--text); margin: 4px 0 8px; line-height: 1.5; }
 #alertPanel code { background: var(--bg); padding: 1px 4px; border-radius: 3px; font-size: 11px; }
+
+/* ── 그리기 v2 ── */
+.seg.scroll { overflow-x: auto; max-width: 100%; scrollbar-width: none; }
+.seg.scroll::-webkit-scrollbar { display: none; }
+.seg.scroll button { flex: 0 0 auto; }
+.row.tools .seg button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+#magnetBtn.on { background: #f5c542 !important; border-color: #f5c542 !important; color: #131722 !important; }
+#undoBtn:disabled, #redoBtn:disabled { opacity: 0.35; cursor: default; }
+#shapeBar { position: absolute; top: 8px; left: 8px; z-index: 6; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; max-width: calc(100% - 70px);
+  background: rgba(30,34,45,0.97); border: 1px solid var(--border); border-radius: 8px; padding: 5px 6px; box-shadow: 0 6px 24px rgba(0,0,0,0.4); }
+#shapeBar .name { color: var(--muted); font-size: 12px; padding: 0 4px; }
+#shapeBar button { background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 5px; min-width: 28px; height: 28px; padding: 0 6px; font: inherit; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+#shapeBar button.on { border-color: var(--accent); color: #fff; background: var(--accent); }
+#shapeBar .sw, #shapeBar .grp { display: inline-flex; gap: 3px; }
+#shapeBar .swatch { width: 22px; min-width: 22px; height: 22px; padding: 0; border-radius: 50%; background: var(--c); border: 2px solid transparent; }
+#shapeBar .swatch.on { border-color: #fff; }
+#shapeBar button i { display: block; width: 14px; background: currentColor; border-radius: 1px; }
+#shapeBar .act-del:hover { color: var(--down); }
