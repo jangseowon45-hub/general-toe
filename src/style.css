@@ -87,3 +87,20 @@ dialog#settings button.primary { background: var(--accent); border-color: var(--
 #shapeBar .swatch.on { border-color: #fff; }
 #shapeBar button i { display: block; width: 14px; background: currentColor; border-radius: 1px; }
 #shapeBar .act-del:hover { color: var(--down); }
+
+/* ── 봇 뷰 ── */
+.chip.bot { border-color: #f5c54266; }
+#botPanel { position: absolute; left: 8px; bottom: 8px; z-index: 5; width: min(420px, calc(100vw - 16px)); max-height: 55%; overflow: auto;
+  background: rgba(30,34,45,0.96); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 12px; box-shadow: 0 6px 24px rgba(0,0,0,0.4); }
+#botPanel .hdr { color: var(--text); font-weight: 600; margin: 0 0 6px; display: flex; justify-content: space-between; gap: 8px; }
+#botPanel .muted { color: var(--muted); font-weight: 400; }
+#botPanel .up { color: var(--up); } #botPanel .down { color: var(--down); }
+#botPanel .strat { display: block; margin: 8px 0 2px; line-height: 1.4; }
+#botPanel .strat input { accent-color: var(--accent); vertical-align: -1px; }
+#botPanel ul { margin: 2px 0 4px 18px; padding: 0; line-height: 1.5; font-variant-numeric: tabular-nums; }
+#botPanel .setup { margin: 4px 0; color: var(--text); }
+#botPanel .hdr { cursor: pointer; user-select: none; }
+#botPanel .hdr .caret { color: var(--muted); margin-left: auto; }
+#botPanel.collapsed > :not(.hdr) { display: none; }
+#botPanel.collapsed { max-height: none; }
+#botPanel .note { margin: 0 0 4px; color: var(--muted); font-size: 11px; line-height: 1.4; }

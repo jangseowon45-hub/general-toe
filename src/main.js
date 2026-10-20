@@ -6,6 +6,7 @@ import { sma, ema, rsi, bollinger } from './indicators.js';
 import { parseTrades, tradesToMarkers, summarize } from './trades.js';
 import { createDrawings } from './drawings.js';
 import { createAlerts } from './alerts.js';
+import { createBotView } from './botview.js';
 
 const SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT', 'BNBUSDT', 'DOGEUSDT'];
 const INDICATORS = [
@@ -66,6 +67,13 @@ const drawings = createDrawings({
   getBar: t => { if (!bars.length) return null; const step = INTERVALS[state.interval]; const bt = Math.floor(t / step) * step; let lo = 0, hi = bars.length - 1; while (lo <= hi) { const m = (lo + hi) >> 1; if (bars[m].time === bt) return bars[m]; bars[m].time < bt ? lo = m + 1 : hi = m - 1; } return null; },
   getRemote: () => alerts.remoteDrawings(),
   onCustomClick: (tool, p) => { if (tool === 'alert') { drawings.setTool('cursor'); alerts.placeAtPrice(p.price); } },
+  onStatus: msg => { const e = document.getElementById('alertStatus'); if (e) e.textContent = msg; },
+});
+const botView = createBotView({
+  chart, series: candles, disp,
+  getBars: () => bars, getStep: () => INTERVALS[state.interval], getSymbol: () => state.symbol,
+  getRange: () => (bars.length ? { firstTime: disp(bars[0].time), step: INTERVALS[state.interval] } : null),
+  panelEl: document.getElementById('botPanel'),
   onStatus: msg => { const e = document.getElementById('alertStatus'); if (e) e.textContent = msg; },
 });
 const alerts = createAlerts({
@@ -206,6 +214,7 @@ async function loadOlder() {
     const lastOld = older[older.length - 1].time;
     bars = older.concat(bars.filter(b => b.time > lastOld));
     renderAll({ fit: false });
+    botView.onBarsChanged();
     if (range) chart.timeScale().setVisibleLogicalRange({ from: range.from + older.length, to: range.to + older.length });
   } catch (e) { console.warn('loadOlder failed', e); }
   finally { loadingOlder = false; }
@@ -225,6 +234,7 @@ async function loadSymbol() {
     renderAll({ fit: true });
     drawings.load(state.symbol);
     alerts.onSymbolChange();
+    botView.setSymbol(state.symbol);
   } catch (e) {
     console.error(e); setConn('error', `시세 로드 실패: ${e.message}`); return;
   }
@@ -277,6 +287,9 @@ for (const def of INDICATORS) {
   });
   indBox.appendChild(b);
 }
+$('botView').checked = !!state.botView;
+$('botView').addEventListener('change', e => { state.botView = e.target.checked; save(); botView.setEnabled(state.botView); });
+if (state.botView) botView.setEnabled(true);
 $('showTrades').checked = !!state.trades;
 $('showTrades').addEventListener('change', e => { state.trades = e.target.checked; save(); renderMarkers(); });
 

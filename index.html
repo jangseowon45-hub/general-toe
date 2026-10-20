@@ -22,6 +22,7 @@
     <div class="row">
       <div id="indicators" class="seg" role="group" aria-label="지표"></div>
       <label class="chip toggle"><input type="checkbox" id="showTrades"> 봇 체결</label>
+      <label class="chip toggle bot"><input type="checkbox" id="botView"> 🤖 봇 뷰</label>
       <label class="chip file" title="봇 체결 CSV 불러오기">CSV<input type="file" id="csvFile" accept=".csv,text/csv"></label>
     </div>
     <div class="row tools">
@@ -53,6 +54,7 @@
   </header>
   <main id="chart">
     <div id="shapeBar" hidden></div>
+    <aside id="botPanel" hidden></aside>
     <aside id="alertPanel" hidden>
       <div id="alertList"></div>
       <div class="actions"><button id="testPush" class="chip">테스트 알림 보내기</button></div>
