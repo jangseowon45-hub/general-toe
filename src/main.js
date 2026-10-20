@@ -129,8 +129,8 @@ function layoutPanes() {
   const panes = chart.panes(); const n = panes.length - 1; if (n <= 0) return;
   const total = el.clientHeight || 600;
   const h = Math.max(70, Math.min(130, Math.round(total * (n >= 3 ? 0.14 : 0.17))));
-  for (let i = 1; i <= n; i++) panes[i].setHeight(h);
-  panes[0].setHeight(Math.max(160, total - h * n));
+  // setHeight 는 마지막 호출만 정확히 반영되므로, 비율(stretch factor)을 전부 한 번에 준다.
+  panes.forEach((p, i) => p.setStretchFactor(i === 0 ? Math.max(160, total - h * n) : h));
 }
 function setAllIndicatorData() {
   if (!bars.length) return;
