@@ -20,7 +20,8 @@
       <div id="intervals" class="seg" role="group" aria-label="봉 주기"></div>
     </div>
     <div class="row">
-      <div id="indicators" class="seg" role="group" aria-label="지표"></div>
+      <button id="addIndicator" class="chip accent" title="지표·전략 추가">＋ 지표</button>
+      <div id="indicators" class="chips" aria-label="적용 중인 지표"></div>
       <label class="chip toggle"><input type="checkbox" id="showTrades"> 봇 체결</label>
       <label class="chip toggle bot"><input type="checkbox" id="botView"> 🤖 봇 뷰</label>
       <label class="chip file" title="봇 체결 CSV 불러오기">CSV<input type="file" id="csvFile" accept=".csv,text/csv"></label>
@@ -66,6 +67,13 @@
     <span id="alertStatus"></span>
     <span id="conn" class="conn">연결 중…</span>
   </footer>
+  <dialog id="indicatorDialog">
+    <div class="dlg-head">
+      <input id="indSearch" type="search" placeholder="지표·전략 검색" autocomplete="off">
+      <button type="button" id="indClose" class="x" title="닫기">✕</button>
+    </div>
+    <div id="indBody"></div>
+  </dialog>
   <dialog id="settings">
     <form method="dialog">
       <h3>알림 중계 설정</h3>

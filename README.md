@@ -7,7 +7,9 @@
 
 - 차트 엔진: [Lightweight Charts](https://github.com/tradingview/lightweight-charts) (Apache 2.0, 트레이딩뷰 공식 오픈소스)
 - 데이터: `fapi.binance.com` REST(과거 1000봉, 왼쪽 스크롤 시 추가 로드) + `fstream.binance.com` WebSocket(실시간, 자동 재접속·끊긴 구간 백필)
-- 지표: MA20, EMA50, EMA200, 볼린저(20,2), RSI(14, 별도 패널)
+- 지표 메뉴(＋ 지표, `src/catalog.js`): 트레이딩뷰 Indicators처럼 검색해서 추가. 같은 지표를 파라미터만 달리해 여러 개 가능, 칩을 탭하면 파라미터 수정, ✕로 제거.
+  추세: SMA, EMA, VWAP(일 세션), 슈퍼트렌드 · 변동성: 볼린저, 돈치안, 켈트너, ATR · 모멘텀: RSI, 스토캐스틱 RSI, MACD · 거래량: OBV. 패널형 지표는 각자 패널을 가진다.
+  "봇 전략" 섹션에서 DC_Trend·SQZ_X를 체크하면 봇 뷰가 켜진다.
 - 봇 체결 표시: `public/trades.csv`(blog/tools/pull_ledger.sh 출력 형식)를 읽어 진입(화살표)·청산(원, 손익) 마커로 찍는다. 상단 CSV 버튼으로 다른 파일도 불러올 수 있다.
 - 시각 표시는 PC/폰의 로컬 시간대(KST). 원장 CSV의 시각은 UTC로 해석한다.
 - 설정(심볼·주기·지표)은 localStorage에 유지된다.

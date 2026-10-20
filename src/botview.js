@@ -206,6 +206,8 @@ export function createBotView({ chart, series, getBars, getStep, getSymbol, disp
     isEnabled: () => enabled,
     setSymbol(sym) { if (sym !== symbol) { symbol = sym; bars4h = []; closed = []; calc = {}; idx4h.clear(); } if (enabled) refresh(); else render(); },
     onBarsChanged() { if (enabled && closed.length) render(); },   // 차트 주기 변경·과거 로드 후 재매핑
+    setStrategy(name, on) { if (name in stratOn) { stratOn[name] = !!on; render(); } },
+    getStrategies: () => ({ ...stratOn }),
     refresh,
   };
 }

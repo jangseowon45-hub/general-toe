@@ -2,26 +2,19 @@ import {
   createChart, CandlestickSeries, HistogramSeries, LineSeries, createSeriesMarkers, CrosshairMode,
 } from 'lightweight-charts';
 import { INTERVALS, fetchKlines, subscribeKline } from './data.js';
-import { sma, ema, rsi, bollinger } from './indicators.js';
+import { CATALOG, PALETTE, GROUPS, paramLabel, shortName } from './catalog.js';
 import { parseTrades, tradesToMarkers, summarize } from './trades.js';
 import { createDrawings } from './drawings.js';
 import { createAlerts } from './alerts.js';
-import { createBotView } from './botview.js';
+import { createBotView, STRATEGIES } from './botview.js';
 
 const SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT', 'BNBUSDT', 'DOGEUSDT'];
-const INDICATORS = [
-  { id: 'ma20', label: 'MA20', color: '#f5c542', calc: b => ({ main: sma(b, 20) }) },
-  { id: 'ema50', label: 'EMA50', color: '#2962ff', calc: b => ({ main: ema(b, 50) }) },
-  { id: 'ema200', label: 'EMA200', color: '#e040fb', calc: b => ({ main: ema(b, 200) }) },
-  { id: 'bb', label: 'BB', color: '#26a69a', calc: b => bollinger(b, 20, 2) },
-  { id: 'rsi', label: 'RSI', color: '#ff9800', pane: 1, calc: b => ({ main: rsi(b, 14) }) },
-];
 const UP = '#26a69a', DOWN = '#ef5350';
 
 // ---- 상태 (localStorage 유지) ----
 const KEY = 'coinchart.v1';
 const state = Object.assign(
-  { symbol: 'BTCUSDT', interval: '15m', ind: { ma20: true, ema50: true, rsi: true }, trades: true },
+  { symbol: 'BTCUSDT', interval: '15m', trades: true },
   JSON.parse(localStorage.getItem(KEY) || '{}'),
 );
 if (!INTERVALS[state.interval]) state.interval = '15m';
@@ -30,6 +23,14 @@ const urlSym = new URLSearchParams(location.search).get('symbol');
 if (urlSym && SYMBOLS.includes(urlSym.toUpperCase())) state.symbol = urlSym.toUpperCase();
 if (!SYMBOLS.includes(state.symbol)) state.symbol = 'BTCUSDT';
 const save = () => localStorage.setItem(KEY, JSON.stringify(state));
+const uid = () => Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-3);
+// 지표 인스턴스 목록. 구버전(state.ind 불리언 맵)은 1회 변환.
+if (!Array.isArray(state.indicators)) {
+  const old = state.ind || { ma20: true, ema50: true, rsi: true };
+  const map = { ma20: ['ma', { n: 20 }], ema50: ['ema', { n: 50 }], ema200: ['ema', { n: 200 }], bb: ['bb', { n: 20, k: 2 }], rsi: ['rsi', { n: 14 }] };
+  state.indicators = Object.entries(map).filter(([k]) => old[k]).map(([, [type, params]], i) => ({ id: uid(), type, params, color: PALETTE[i % PALETTE.length] }));
+  delete state.ind; save();
+}
 
 // Lightweight Charts는 시각을 UTC로 그린다. 로컬(KST) 표시를 위해 오프셋만큼 밀어서 넣는다.
 const TZ = -new Date().getTimezoneOffset() * 60;
@@ -89,46 +90,50 @@ const toVol = b => ({
   time: disp(b.time), value: b.volume,
   color: b.close >= b.open ? 'rgba(38,166,154,0.45)' : 'rgba(239,83,80,0.45)',
 });
-const shift = pts => pts.map(p => ({ time: disp(p.time), value: p.value }));
 
-// ---- 지표 시리즈 관리 ----
-const indSeries = {}; // id -> { key: ISeriesApi }
-function ensureIndicator(def) {
-  if (indSeries[def.id]) return indSeries[def.id];
-  const mk = (color, width = 1.5, style = 0) => chart.addSeries(LineSeries, {
-    color, lineWidth: width, lineStyle: style, priceLineVisible: false, lastValueVisible: def.pane === 1,
-    crosshairMarkerVisible: false,
-    ...(def.pane === 1 ? { priceFormat: { type: 'price', precision: 1, minMove: 0.1 } } : {}),
-  }, def.pane || 0);
-  const s = def.id === 'bb'
-    ? { upper: mk(def.color, 1), middle: mk(def.color, 1, 2), lower: mk(def.color, 1) }
-    : { main: mk(def.color) };
-  indSeries[def.id] = s;
-  if (def.pane === 1) {
-    const p = chart.panes()[1];
-    if (p) p.setHeight(Math.max(90, Math.round(el.clientHeight * 0.2)));
-    s.main.createPriceLine({ price: 70, color: '#787b86', lineWidth: 1, lineStyle: 3, axisLabelVisible: false });
-    s.main.createPriceLine({ price: 30, color: '#787b86', lineWidth: 1, lineStyle: 3, axisLabelVisible: false });
+// ---- 지표 인스턴스 관리 (카탈로그 기반, 같은 지표 여러 개 가능) ----
+const instSeries = new Map(); // inst.id -> { def, inst, series:{key: ISeriesApi}, pane, color }
+const shiftPts = pts => pts.map(p => p.value === undefined ? { time: disp(p.time) } : { time: disp(p.time), value: p.value, ...(p.color ? { color: p.color } : {}) });
+function buildIndicatorSeries() {
+  for (const e of instSeries.values()) Object.values(e.series).forEach(x => chart.removeSeries(x));
+  instSeries.clear();
+  try { while (chart.panes().length > 1) chart.removePane(chart.panes().length - 1); } catch {}
+  let paneIdx = 1;
+  state.indicators.forEach((inst, i) => {
+    const def = CATALOG[inst.type]; if (!def) return;
+    const pane = def.pane ? paneIdx++ : 0;
+    const color = inst.color || PALETTE[i % PALETTE.length];
+    const prec = def.precision ?? 2;
+    const series = {};
+    for (const [k, l] of Object.entries(def.lines)) {
+      const common = {
+        priceLineVisible: false, lastValueVisible: !!def.pane, crosshairMarkerVisible: false,
+        title: l.title || (def.pane ? shortName(inst.type) : ''),
+        ...(def.pane ? { priceFormat: { type: 'price', precision: prec, minMove: 1 / 10 ** prec } } : {}),
+      };
+      series[k] = l.type === 'hist'
+        ? chart.addSeries(HistogramSeries, { ...common, color: l.color || color, base: 0 }, pane)
+        : chart.addSeries(LineSeries, { ...common, color: l.color || color, lineWidth: l.width || 1.5, lineStyle: l.style || 0 }, pane);
+    }
+    if (def.pane) {
+      const p = chart.panes()[pane]; if (p) p.setHeight(Math.max(80, Math.round(el.clientHeight * 0.16)));
+      const first = Object.values(series).find(x => x);
+      (def.levels || []).forEach(lv => first.createPriceLine({ price: lv, color: '#787b86', lineWidth: 1, lineStyle: 3, axisLabelVisible: false }));
+    }
+    instSeries.set(inst.id, { def, inst, series, pane, color });
+  });
+  setAllIndicatorData();
+}
+function setAllIndicatorData() {
+  if (!bars.length) return;
+  for (const e of instSeries.values()) { const r = e.def.build(bars, e.inst.params); for (const k of Object.keys(e.series)) e.series[k].setData(shiftPts(r[k] || [])); }
+}
+function updateIndicatorsLast() {
+  for (const e of instSeries.values()) {
+    const r = e.def.build(bars, e.inst.params);
+    for (const k of Object.keys(e.series)) { const a = r[k]; if (a && a.length) e.series[k].update(shiftPts([a[a.length - 1]])[0]); }
   }
-  return s;
 }
-function removeIndicator(id) {
-  const s = indSeries[id]; if (!s) return;
-  Object.values(s).forEach(x => chart.removeSeries(x));
-  delete indSeries[id];
-}
-function setIndicatorData(def, bars) {
-  const s = ensureIndicator(def); const r = def.calc(bars);
-  for (const k of Object.keys(s)) s[k].setData(shift(r[k] || []));
-}
-function updateIndicatorLast(def, bars) {
-  const s = indSeries[def.id]; if (!s) return; const r = def.calc(bars);
-  for (const k of Object.keys(s)) {
-    const a = r[k];
-    if (a && a.length) { const p = a[a.length - 1]; s[k].update({ time: disp(p.time), value: p.value }); }
-  }
-}
-const activeIndicators = () => INDICATORS.filter(d => state.ind[d.id]);
 
 // ---- 데이터 ----
 let bars = [];            // 오름차순, time=UTC초
@@ -166,9 +171,7 @@ function applyPrecision() {
 function renderAll({ fit }) {
   candles.setData(bars.map(toCandle));
   volume.setData(bars.map(toVol));
-  for (const def of INDICATORS) {
-    if (state.ind[def.id]) setIndicatorData(def, bars); else removeIndicator(def.id);
-  }
+  setAllIndicatorData();
   renderMarkers();
   applyPrecision();
   updatePriceLabel();
@@ -187,7 +190,7 @@ function onLiveBar(bar) {
   else if (bar.time > last.time) bars.push(bar);
   else return;
   candles.update(toCandle(bar)); volume.update(toVol(bar));
-  for (const def of activeIndicators()) updateIndicatorLast(def, bars);
+  updateIndicatorsLast();
   updatePriceLabel();
 }
 
@@ -277,16 +280,70 @@ for (const iv of Object.keys(INTERVALS)) {
   });
   ivBox.appendChild(b);
 }
-const indBox = $('indicators');
-for (const def of INDICATORS) {
-  const b = document.createElement('button'); b.textContent = def.label; b.style.setProperty('--c', def.color);
-  b.className = `ind ${state.ind[def.id] ? 'on' : ''}`;
-  b.addEventListener('click', () => {
-    state.ind[def.id] = !state.ind[def.id]; save(); b.className = `ind ${state.ind[def.id] ? 'on' : ''}`;
-    if (state.ind[def.id]) setIndicatorData(def, bars); else removeIndicator(def.id);
+// ---- 지표 칩 + 지표 메뉴 ----
+function renderChips() {
+  const box = $('indicators'); box.innerHTML = '';
+  state.indicators.forEach((inst, i) => {
+    const e = instSeries.get(inst.id); const color = (e && e.color) || inst.color || PALETTE[i % PALETTE.length];
+    const c = document.createElement('span'); c.className = 'ichip'; c.style.setProperty('--c', color); c.title = (CATALOG[inst.type] && CATALOG[inst.type].name) || inst.type;
+    c.innerHTML = `<span class="lbl">${paramLabel(inst.type, inst.params)}</span><button class="rm" title="제거">✕</button>`;
+    c.querySelector('.lbl').addEventListener('click', () => editIndicator(inst.id));
+    c.querySelector('.rm').addEventListener('click', ev => { ev.stopPropagation(); removeIndicatorInst(inst.id); });
+    box.appendChild(c);
   });
-  indBox.appendChild(b);
 }
+function afterIndicatorsChange() { save(); buildIndicatorSeries(); renderChips(); renderDialog(); }
+function addIndicator(type) {
+  const def = CATALOG[type]; if (!def) return;
+  state.indicators.push({ id: uid(), type, params: { ...def.params }, color: PALETTE[state.indicators.length % PALETTE.length] });
+  afterIndicatorsChange();
+}
+function removeIndicatorInst(id) { state.indicators = state.indicators.filter(x => x.id !== id); afterIndicatorsChange(); }
+function editIndicator(id) {
+  const inst = state.indicators.find(x => x.id === id); if (!inst) return;
+  const def = CATALOG[inst.type]; const keys = Object.keys(def.params); if (!keys.length) return;
+  const ans = prompt(`${def.name} 파라미터 (${keys.join(', ')})`, keys.map(k => inst.params[k]).join(', '));
+  if (ans == null) return;
+  const vals = ans.split(',').map(v => parseFloat(v.trim()));
+  if (vals.length !== keys.length || vals.some(v => !Number.isFinite(v) || v <= 0)) { alert('값이 올바르지 않아요'); return; }
+  keys.forEach((k, i) => { inst.params[k] = vals[i]; });
+  afterIndicatorsChange();
+}
+const indDlg = $('indicatorDialog');
+const esc = t => String(t).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+function renderDialog() {
+  if (!indDlg.open) return;
+  const q = ($('indSearch').value || '').trim().toLowerCase();
+  const match = txt => !q || txt.toLowerCase().includes(q);
+  const pstr = p => Object.entries(p).map(([k, v]) => `${k}=${v}`).join(' ');
+  let html = '';
+  const mine = state.indicators.filter(inst => CATALOG[inst.type] && match(CATALOG[inst.type].name + ' ' + inst.type));
+  if (mine.length) html += '<h4>적용 중</h4>' + mine.map(inst => { const d = CATALOG[inst.type]; return `<div class="item active" style="--c:${inst.color}"><span class="nm">${d.name} <span class="muted">${esc(pstr(inst.params))}</span></span><span class="ds">${d.desc}</span><span class="act"><button data-edit="${inst.id}" ${Object.keys(d.params).length ? '' : 'disabled'}>설정</button><button class="danger" data-rm="${inst.id}">제거</button></span></div>`; }).join('');
+  const strats = Object.entries(STRATEGIES).filter(([n, d]) => match(n + ' ' + d.desc + ' 봇 전략'));
+  if (strats.length) html += '<h4>봇 전략 (4h · 봇과 같은 계산)</h4>' + strats.map(([n, d]) => `<label class="strat"><input type="checkbox" data-strat="${n}" ${state.botView && botView.getStrategies()[n] ? 'checked' : ''}><span><b style="color:${d.color}">${d.label}</b> <span class="muted">${d.symbols.map(x => x.replace('USDT', '')).join('·')}</span><br><span class="ds muted">${d.desc}</span></span></label>`).join('');
+  for (const g of GROUPS) {
+    const items = Object.entries(CATALOG).filter(([t, d]) => d.group === g && match(`${d.name} ${d.desc} ${t} ${shortName(t)}`));
+    if (!items.length) continue;
+    html += `<h4>${g}</h4>` + items.map(([t, d]) => `<div class="item"><span class="nm">${d.name}</span><span class="ds">${d.desc}${Object.keys(d.params).length ? ' · 기본 ' + esc(pstr(d.params)) : ''}</span><span class="act"><button class="primary" data-add="${t}">추가</button></span></div>`).join('');
+  }
+  $('indBody').innerHTML = html || '<p class="empty">검색 결과 없음</p>';
+}
+$('indBody').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.add) addIndicator(b.dataset.add);
+  else if (b.dataset.rm) removeIndicatorInst(b.dataset.rm);
+  else if (b.dataset.edit) editIndicator(b.dataset.edit);
+});
+$('indBody').addEventListener('change', e => {
+  const cb = e.target.closest('input[data-strat]'); if (!cb) return;
+  if (cb.checked && !state.botView) { state.botView = true; $('botView').checked = true; save(); botView.setEnabled(true); }
+  botView.setStrategy(cb.dataset.strat, cb.checked);
+});
+$('indSearch').addEventListener('input', renderDialog);
+$('addIndicator').addEventListener('click', () => { $('indSearch').value = ''; indDlg.showModal(); renderDialog(); $('indSearch').focus(); });
+$('indClose').addEventListener('click', () => indDlg.close());
+indDlg.addEventListener('click', e => { if (e.target === indDlg) indDlg.close(); });
+buildIndicatorSeries(); renderChips();
 $('botView').checked = !!state.botView;
 $('botView').addEventListener('change', e => { state.botView = e.target.checked; save(); botView.setEnabled(state.botView); });
 if (state.botView) botView.setEnabled(true);
@@ -307,7 +364,7 @@ drawings.onToolChange(t => {
 $('clearDrawings').addEventListener('click', () => {
   if (drawings.count() && confirm(`${state.symbol.replace('USDT', '')} 차트의 그림 ${drawings.count()}개를 모두 지울까요?`)) drawings.clearAll();
 });
-window.__drawings = drawings; // 콘솔 디버그용
+window.__drawings = drawings; window.__chart = chart; // 콘솔 디버그용
 $('undoBtn').addEventListener('click', () => drawings.undo());
 $('redoBtn').addEventListener('click', () => drawings.redo());
 $('magnetBtn').addEventListener('click', () => { drawings.setMagnet(!drawings.getMagnet()); $('magnetBtn').classList.toggle('on', drawings.getMagnet()); });
